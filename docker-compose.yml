@@ -1,0 +1,73 @@
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    ports:
+      - "9000:9000"
+      - "9870:9870"
+    environment:
+      - CLUSTER_NAME=hdfs_cluster
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - CORE_CONF_hadoop_http_staticuser_user=root
+      - CORE_CONF_hadoop_proxyuser_hue_hosts=*
+      - CORE_CONF_hadoop_proxyuser_hue_groups=*
+      - HDFS_CONF_dfs_webhdfs_enabled=true
+      - HDFS_CONF_dfs_permissions_enabled=false
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    ports:
+      - "9864:9864"
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    depends_on:
+      - namenode
+    volumes:
+      - datanode_data:/hadoop/dfs/data
+      - ./data:/data
+
+  spark-master:
+    image: bitnami/spark:3
+    container_name: spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      - SPARK_MODE=master
+      - HADOOP_CONF_DIR=/opt/bitnami/spark/conf
+    volumes:
+      - ./data:/data
+    depends_on:
+      - namenode
+      - datanode
+
+  spark-worker:
+    image: bitnami/spark:3
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    depends_on:
+      - spark-master
+
+  notebook:
+    image: jupyter/pyspark-notebook:latest
+    container_name: notebook
+    ports:
+      - "8888:8888"
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - JUPYTER_ENABLE_LAB=yes
+    volumes:
+      - ./data:/data
+      - ./notebooks:/home/jovyan/work
+    depends_on:
+      - spark-master
+
+volumes:
+  namenode_data:
+  datanode_data:
